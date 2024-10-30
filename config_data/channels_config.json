@@ -1542,5 +1542,6 @@
             "time_class": "p-programms__item__time-value",
             "title_class": "p-programms__item__name-link"
         }
+        
     ]
 }
