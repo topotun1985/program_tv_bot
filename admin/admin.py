@@ -16,36 +16,37 @@ logger = logging.getLogger(__name__)
 
 admin_router = Router()
 
-@admin_router.message(Command('addchannelprogramm'))
-async def process_add_channel_programm(message: Message, session: AsyncSession):
-    try:
-        # Загружаем конфигурацию каналов
-        channels = load_channel_config('config_data/channels_config.json')
+# @admin_router.message(Command('addchannelprogramm'))
+# async def process_add_channel_programm(message: Message, session: AsyncSession):
+#     try:
+#         # Загружаем конфигурацию каналов
+#         channels = load_channel_config('config_data/channels_config.json')
 
-        # Парсинг всех каналов синхронно
-        channel_programs = parse_all_channels_sync(channels)
+#         # Парсинг всех каналов синхронно
+#         channel_programs = parse_all_channels_sync(channels)
 
-        # Добавляем программы в БД для каждого канала
-        for channel_name, program_data in channel_programs:
-            await add_channel_program(session, channel_name, program_data)
+#         # Добавляем программы в БД для каждого канала
+#         for channel_name, program_data in channel_programs:
+#             await add_channel_program(session, channel_name, program_data)
 
-        # Отправляем сообщение о завершении операции
-        await message.answer('Программы всех каналов добавлены!', parse_mode=None)
+#         # Отправляем сообщение о завершении операции
+#         await message.answer('Программы всех каналов добавлены!', parse_mode=None)
 
-    except Exception as e:
-        await message.answer(f'Ошибка: \n{str(e)}\nОбратитесь в поддержку', parse_mode=None)
+#     except Exception as e:
+#         await message.answer(f'Ошибка: \n{str(e)}\nОбратитесь в поддержку', parse_mode=None)
 
 
 
-@admin_router.message(Command('deletechannelprogramm'))
-async def process_delete_channel_programm(message: Message, session: AsyncSession):
-    try:
-        # Вызываем функцию для удаления всех программ
-        await orm_delete_all_programs(session)
-        await message.answer("Все программы успешно удалены!", parse_mode=None)
-    except Exception as e:
-        await message.answer(f"Ошибка: \n{str(e)}\nОбратитесь в поддержку", parse_mode=None)
+# @admin_router.message(Command('deletechannelprogramm'))
+# async def process_delete_channel_programm(message: Message, session: AsyncSession):
+#     try:
+#         # Вызываем функцию для удаления всех программ
+#         await orm_delete_all_programs(session)
+#         await message.answer("Все программы успешно удалены!", parse_mode=None)
+#     except Exception as e:
+#         await message.answer(f"Ошибка: \n{str(e)}\nОбратитесь в поддержку", parse_mode=None)
 
+# =================================================================================
 
 # @admin_router.message(Command('addprogram'))
 # async def process_admin_command(message: Message, session: AsyncSession):

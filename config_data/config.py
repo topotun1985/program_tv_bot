@@ -36,3 +36,5 @@ def load_config(path: Union[str, None] = None):
             database=env.str('DB_NAME')
         ),
     )
+
+user = 855277058

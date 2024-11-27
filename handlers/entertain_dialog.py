@@ -1,15 +1,7 @@
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, User
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window, setup_dialogs
-from aiogram_dialog.widgets.kbd import Start, Next, Back, Cancel, SwitchTo, ScrollingGroup, Button, Row, Select, Group, Checkbox, ManagedCheckbox
-from aiogram_dialog.widgets.text import Const, Format, List, Multi
-from database.orm_query import orm_get_programs, orm_get_program
-from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from aiogram_dialog import Dialog, Window
+from aiogram_dialog.widgets.kbd import Start, Cancel, Row
+from aiogram_dialog.widgets.text import Const
 from config_data.tv_channel_utils import create_tv_channel_dialog
 
 
@@ -79,7 +71,7 @@ class SaturdaySG(StatesGroup):
 
 entertain_dialog = Dialog(
     Window(
-        Const(text='Развлечения 👇'),
+        Const(text='🎉 <b>Развлекательные каналы</b>'),
         Row(
             Start(Const('Мужской'), id='b_man_ch', state=ManSG.start),
             Start(Const('LUXURY'),id='b_luxury_ch', state=LuxurySG.start),
@@ -110,6 +102,7 @@ entertain_dialog = Dialog(
         state=EntertainSG.start
     ),
 )
+
 
 man_channel = create_tv_channel_dialog('Мужской', ManSG.start)
 luxury_channel = create_tv_channel_dialog('LUXURY', LuxurySG.start)

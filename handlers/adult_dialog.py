@@ -1,15 +1,7 @@
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, User
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window, setup_dialogs
-from aiogram_dialog.widgets.kbd import Start, Next, Back, Cancel, SwitchTo, ScrollingGroup, Button, Row, Select, Group, Checkbox, ManagedCheckbox
-from aiogram_dialog.widgets.text import Const, Format, List, Multi
-from database.orm_query import orm_get_programs, orm_get_program
-from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from aiogram_dialog import Dialog, Window
+from aiogram_dialog.widgets.kbd import Start, Cancel, Row
+from aiogram_dialog.widgets.text import Const
 from config_data.tv_channel_utils import create_tv_channel_dialog
 
 
@@ -79,7 +71,7 @@ class BabesTvSG(StatesGroup):
 
 adult_dialog = Dialog(
     Window(
-        Const(text='18+ 👇'),
+        Const(text='🔞 <b>Каналы для взрослых</b>'),
         Row(
             Start(Const('Candy TV'), id='b_candy_tv_ch', state=CandyTvSG.start),
             Start(Const('Русская ночь'),id='b_russian_night_ch', state=RussianNightSG.start),
@@ -111,6 +103,7 @@ adult_dialog = Dialog(
     ),
 )
 
+
 candy_tv_channel = create_tv_channel_dialog('Candy TV', CandyTvSG.start)
 russian_night_channel = create_tv_channel_dialog('Русская ночь', RussianNightSG.start)
 hustler_hd_channel = create_tv_channel_dialog('Hustler HD', HustlerHdSG.start)
@@ -126,4 +119,3 @@ private_spice_channel = create_tv_channel_dialog('Private Spice', PrivateSpiceSG
 erox_channel = create_tv_channel_dialog('Erox', EroxSG.start)
 barely_legal_channel = create_tv_channel_dialog('Barely legal', BarelyLegalSG.start)
 babes_tv_channel = create_tv_channel_dialog('Babes TV', BabesTvSG.start)
-

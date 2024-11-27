@@ -288,11 +288,13 @@ from handlers.adult_dialog import(
     barely_legal_channel,
     babes_tv_channel
 )
+from handlers.favorites_dialog import favorites_dialog
 
 
 CHANNEL_GROUPS = {
     "start": [start_router, start_dialog],
     "admin": [admin_router],
+    "favorites": [favorites_dialog],
     "federal": [
         fed_dialog,
         first_channel,

@@ -1,15 +1,7 @@
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, User
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window, setup_dialogs
-from aiogram_dialog.widgets.kbd import Start, Next, Back, Cancel, SwitchTo, ScrollingGroup, Button, Row, Select, Group, Checkbox, ManagedCheckbox
-from aiogram_dialog.widgets.text import Const, Format, List, Multi
-from database.orm_query import orm_get_programs, orm_get_program
-from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from aiogram_dialog import Dialog, Window
+from aiogram_dialog.widgets.kbd import Start, Cancel, ScrollingGroup
+from aiogram_dialog.widgets.text import Const
 from config_data.tv_channel_utils import create_tv_channel_dialog
 
 
@@ -151,7 +143,7 @@ class CountryLifeSG(StatesGroup):
 
 educat_dialog = Dialog(
     Window(
-        Const(text='Познавательные 👇'),
+        Const(text='📚 <b>Познавательные каналы</b>'),
         ScrollingGroup(
             Start(Const('История'), id='b_history_ch', state=HistorySG.start),
             Start(Const('Тайны Галактики'), id='b_mysteries_of_the_galaxy_ch', state=MysteryOfGalaxySG.start),

@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: tv_bot
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_started
+    environment:
+      - TZ=Europe/Moscow
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+    restart: always
+    networks:
+      bot-network:
+        aliases:
+          - bot
+
+  db:
+    image: postgres:15
+    container_name: tv_bot_db
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - TZ=Europe/Moscow
+      - PGTZ=Europe/Moscow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    command: -c 'timezone=Europe/Moscow'
+    ports:
+      - "5432:5432"
+    restart: always
+    networks:
+      bot-network:
+        aliases:
+          - db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: tv_bot_redis
+    restart: always
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      bot-network:
+        aliases:
+          - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redis-data:
+
+networks:
+  bot-network:
+    name: tv_bot_network
+    driver: bridge

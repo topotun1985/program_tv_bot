@@ -1,8 +1,8 @@
 import logging
-from database.models import Programs
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
+from database.models import Programs, User, UserFavorite, Donation
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text, insert, values, update, delete, func, and_, or_
+from sqlalchemy import select, text, and_, update, func
 
 
 logging.basicConfig(level=logging.INFO)
@@ -31,71 +31,96 @@ async def add_channel_program(session: AsyncSession, channel_name, program_data)
     await session.commit()
 
 
-async def orm_get_programs(session: AsyncSession, channel_name):
-    # Получаем текущее время
+async def orm_get_programs(session: AsyncSession, channel_name: str):
+    # Получаем текущее время и дату
     current_time = datetime.now().time()
+    current_date = datetime.now().date()
 
-    # Запрос для получения всех программ на текущий день (от начала дня до конца)
+    # Запрос для программ сегодняшнего дня (с 05:00 до 23:59)
     query_today = (
         select(Programs)
         .where(
             and_(
                 Programs.channel_name == channel_name,
-                Programs.program_time >= time(0, 0),  # Программы с начала дня
-                Programs.program_time <= time(23, 59)  # До конца дня
+                Programs.program_time >= time(5, 0),
+                Programs.program_time <= time(23, 59)
             )
         )
-        .order_by(Programs.program_time)  # Сортировка по времени программы
+        .order_by(Programs.program_time)
     )
 
-    # Запрос для получения программ на следующий день (с полуночи до 05:00)
+    # Запрос для программ следующего дня (с 00:00 до 04:59)
     query_tomorrow = (
         select(Programs)
         .where(
             and_(
                 Programs.channel_name == channel_name,
-                Programs.program_time >= time(0, 0),  # Программы с полуночи
-                Programs.program_time <= time(5, 0)   # До 05:00
+                Programs.program_time >= time(0, 0),
+                Programs.program_time <= time(4, 59)
             )
         )
-        .order_by(Programs.program_time)  # Сортировка по времени программы
+        .order_by(Programs.program_time)
     )
 
-    # Выполняем оба запроса
+    # Запрос для программ вчерашнего вечера (с 22:00 до 23:59)
+    query_yesterday_late_night = (
+        select(Programs)
+        .where(
+            and_(
+                Programs.channel_name == channel_name,
+                Programs.program_time >= time(22, 0),
+                Programs.program_time <= time(23, 59)
+            )
+        )
+        .order_by(Programs.program_time)
+    )
+
+    # Выполняем запросы
     result_today = await session.execute(query_today)
     result_tomorrow = await session.execute(query_tomorrow)
+    result_yesterday_late_night = await session.execute(query_yesterday_late_night)
 
-    # Получаем списки программ
+    # Получаем результаты
     programs_today = result_today.scalars().all()
     programs_tomorrow = result_tomorrow.scalars().all()
+    programs_yesterday_late_night = result_yesterday_late_night.scalars().all()
 
-    # Найдем текущую программу (которая идет в данный момент)
-    current_program = None
+    # Список предстоящих программ и текущая программа
     upcoming_programs = []
+    current_program = None
 
-    for i, program in enumerate(programs_today):
-        # Если нашли программу, которая идет сейчас
-        if program.program_time <= current_time:
-            if i + 1 < len(programs_today):
-                next_program = programs_today[i + 1]
-                # Если следующая программа начинается после текущего времени, значит текущая программа идет сейчас
-                if next_program.program_time > current_time:
-                    current_program = program
-                    upcoming_programs = programs_today[i + 1:]
-                    break
-            else:
-                # Если это последняя программа на сегодня
+    # Проверка времени, чтобы включить текущую программу
+    if current_time < time(5, 0):
+        # Время после полуночи до 05:00
+        if programs_yesterday_late_night:
+            # Берем последнюю программу из вчерашнего вечера
+            last_night_program = programs_yesterday_late_night[-1]
+            # Если следующая программа еще не началась, значит текущая - вчерашняя
+            if not programs_tomorrow or (programs_tomorrow and programs_tomorrow[0].program_time > current_time):
+                current_program = last_night_program
+
+        # Добавляем программы текущего дня
+        if current_program:
+            upcoming_programs.append(current_program)
+        upcoming_programs.extend(programs_tomorrow)
+
+    else:
+        # Время после 05:00 - ищем текущую программу в сегодняшнем расписании
+        for program in programs_today:
+            if program.program_time <= current_time:
                 current_program = program
-                break
+            elif program.program_time > current_time:
+                upcoming_programs.append(program)
 
-    # Если программа найдена, добавляем ее в результат
-    if current_program:
-        upcoming_programs.insert(0, current_program)
+        # Вставляем текущую программу, если она найдена
+        if current_program:
+            upcoming_programs.insert(0, current_program)
 
-    # Добавляем программы на следующий день (после полуночи)
-    upcoming_programs += programs_tomorrow
+        # Добавляем завтрашние программы (с 00:00 до 04:59)
+        upcoming_programs.extend(programs_tomorrow)
 
     return upcoming_programs
+
 
 async def orm_get_program(session: AsyncSession, program_title: str):
     query = select(Programs).where(Programs.channel_name == program_title)
@@ -114,487 +139,102 @@ async def orm_delete_all_programs(session: AsyncSession):
         await session.rollback()
 
 
-# async def orm_add_program(session: AsyncSession):
-#     obj = Programs(
-#         channel_name = 'Первый канал',
-#         program_title = 'Футбол',
-#         program_time = time(16,55)
-#     )
-#     session.add(obj)
-#     await session.commit()
+async def add_new_user(session: AsyncSession, user_id: str, username: str):
+    # Проверяем, есть ли пользователь в базе
+    query = select(User).where(User.user_id == user_id)
+    result = await session.execute(query)
+    user = result.scalars().first()
+
+    # Если пользователь новый, добавляем его в базу
+    if not user:
+        new_user = User(user_id=user_id, username=username)
+        session.add(new_user)
+        await session.commit()
+        return new_user
+    return user  # Возвращаем объект пользователя, если он уже существует
+
+
+async def add_favorite_channel(session: AsyncSession, user_id: str, channel_name: str):
+    # Получаем пользователя по user_id
+    query = select(User).where(User.user_id == user_id)
+    result = await session.execute(query)
+    user = result.scalars().first()
+
+    # Если пользователь не найден, сначала добавляем его
+    if not user:
+        raise ValueError("User not found. Please register the user before adding favorites.")
+
+    # Проверяем, есть ли уже канал в избранном
+    query_fav = select(UserFavorite).where(
+        UserFavorite.user_id == user.id,
+        UserFavorite.channel_name == channel_name
+    )
+    result_fav = await session.execute(query_fav)
+    favorite = result_fav.scalars().first()
+
+    # Если канал еще не в избранном, добавляем
+    if not favorite:
+        new_favorite = UserFavorite(user_id=user.id, channel_name=channel_name)
+        session.add(new_favorite)
+        await session.commit()
+        return new_favorite
+    return favorite  # Если уже есть, возвращаем существующий объект
+
+
+# ORM-методы для работы с избранным
+async def orm_add_to_favorites(session: AsyncSession, user_id: str, channel_name: str):
+    result = await session.execute(
+        select(UserFavorite).where(UserFavorite.user_id == user_id, UserFavorite.channel_name == channel_name)
+    )
+    favorite = result.scalars().first()
+    if not favorite:
+        new_favorite = UserFavorite(user_id=user_id, channel_name=channel_name, created=datetime.now())
+        session.add(new_favorite)
+        await session.commit()
+
+
+async def orm_remove_from_favorites(session: AsyncSession, user_id: str, channel_name: str):
+    result = await session.execute(
+        select(UserFavorite).where(UserFavorite.user_id == user_id, UserFavorite.channel_name == channel_name)
+    )
+    favorite = result.scalars().first()
+    if favorite:
+        await session.delete(favorite)
+        await session.commit()
+
+
+async def orm_get_favorites(session: AsyncSession, user_id: str):
+    result = await session.execute(
+        select(UserFavorite).where(UserFavorite.user_id == str(user_id))  # Приведение user_id к строке
+    )
+    return result.scalars().all()
+
+
+async def ensure_user_exists(user_id: str, session: AsyncSession) -> bool:
+    """Проверка существования пользователя"""
+    user_id_str = str(user_id)
+    query = select(User).where(User.user_id == user_id_str)
+    result = await session.execute(query)
+    return result.scalar_one_or_none() is not None
+
+
+async def save_donation(session: AsyncSession, user_id: str, amount: int, payment_id: str) -> None:
+    """Сохраняет информацию о донате через Telegram Stars"""
+    donation = Donation(
+        user_id=str(user_id),
+        amount=amount,
+        payment_id=payment_id
+    )
+    session.add(donation)
+    await session.commit()
+
+
+async def get_user_total_donations(session: AsyncSession, user_id: str) -> int:
+    """Возвращает общую сумму донатов пользователя в звездах"""
+    result = await session.execute(
+        select(func.sum(Donation.amount))
+        .where(Donation.user_id == str(user_id))
+    )
+    total = result.scalar()
+    return total or 0
 
-
-
-# async def add_channel_program(session, channel_name, program_data):
-#     for time_str, title in program_data:
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name=channel_name,
-#             program_time=time_obj,
-#             program_title=title
-#         )
-#         await session.execute(insert_stmt)
-#     await session.commit()
-
-
-
-# async def add_first_channel_program(session: AsyncSession):
-#     channel_name = "Первый канал"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in first_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Первый канал',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_russia_one_channel_program(session: AsyncSession):
-#     channel_name = "Россия 1"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in russia_one_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Россия 1',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_match_tv_channel_program(session: AsyncSession):
-#     channel_name = "Матч"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in match_tv_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Матч',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_ntv_channel_program(session: AsyncSession):
-#     channel_name = "НТВ"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in ntv_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='НТВ',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_five_tv_channel_program(session: AsyncSession):
-#     channel_name = "Пятый"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in five_tv_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Пятый',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_tv_center_channel_program(session: AsyncSession):
-#     channel_name = "ТВ Центр"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in tv_center_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='ТВ Центр',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_culture_channel_program(session: AsyncSession):
-#     channel_name = "Культура"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in culture_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Культура',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_sts_channel_program(session: AsyncSession):
-#     channel_name = "СТС"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in sts_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='СТС',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_ren_tv_channel_program(session: AsyncSession):
-#     channel_name = "РЕН ТВ"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in ren_tv_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='РЕН ТВ',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_otp_channel_program(session: AsyncSession):
-#     channel_name = "ОТР"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in otp_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='ОТР',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_tnt_channel_program(session: AsyncSession):
-#     channel_name = "ТНТ"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in tnt_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='ТНТ',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_home_channel_program(session: AsyncSession):
-#     channel_name = "Домашний"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in home_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Домашний',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_friday_channel_program(session: AsyncSession):
-#     channel_name = "Пятница"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in friday_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Пятница',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_tv3_channel_program(session: AsyncSession):
-#     channel_name = "ТВ-3"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in tv3_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='ТВ-3',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_muz_tv_channel_program(session: AsyncSession):
-#     channel_name = "МУЗ ТВ"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in muz_tv_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='МУЗ ТВ',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_carousel_channel_program(session: AsyncSession):
-#     channel_name = "Карусель"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in carousel_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Карусель',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_star_channel_program(session: AsyncSession):
-#     channel_name = "Звезда"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in star_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Звезда',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_che_channel_program(session: AsyncSession):
-#     channel_name = "Че"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in che_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Че',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_mir_channel_program(session: AsyncSession):
-#     channel_name = "МИР"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in mir_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='МИР',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_spas_channel_program(session: AsyncSession):
-#     channel_name = "Спас ТВ"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in spas_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Спас ТВ',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_you_channel_program(session: AsyncSession):
-#     channel_name = "Ю"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in you_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Ю',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()
-
-
-# async def add_russia24_channel_program(session: AsyncSession):
-#     channel_name = "Россия 24"  # Или любой другой источник данных для имени канала
-
-#     for time_str, title in russia24_channel_program_data:
-#         # Преобразуем строку времени в объект времени
-#         time_obj = datetime.strptime(time_str, '%H:%M').time()
-
-#         # Собираем запрос на вставку данных
-#         insert_stmt = Programs.__table__.insert().values(
-#             channel_name='Россия 24',  # Добавляем значение для channel_name
-#             program_time=time_obj,
-#             program_title=title
-#         )
-
-#         # Выполняем запрос
-#         await session.execute(insert_stmt)
-
-#     # Подтверждаем транзакцию
-#     await session.commit()

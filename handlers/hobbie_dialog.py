@@ -1,15 +1,7 @@
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, User
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window, setup_dialogs
-from aiogram_dialog.widgets.kbd import Start, Next, Back, Cancel, SwitchTo, ScrollingGroup, Button, Row, Select, Group, Checkbox, ManagedCheckbox
-from aiogram_dialog.widgets.text import Const, Format, List, Multi
-from database.orm_query import orm_get_programs, orm_get_program
-from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from aiogram_dialog import Dialog, Window
+from aiogram_dialog.widgets.kbd import Start, Cancel, ScrollingGroup
+from aiogram_dialog.widgets.text import Const
 from config_data.tv_channel_utils import create_tv_channel_dialog
 
 
@@ -127,7 +119,7 @@ class FishingDialoguesSG(StatesGroup):
 
 hobbie_dialog = Dialog(
     Window(
-        Const(text='Увлечения 👇'),
+        Const(text='🎣 <b>Каналы по интересам</b>'),
         ScrollingGroup(
             Start(Const('PRO Business'), id='b_pro_business_ch', state=ProBusinessSG.start),
             Start(Const('Fashion TV'),id='b_fashion_tv_ch', state=FashionTvSG.start),
@@ -166,6 +158,7 @@ hobbie_dialog = Dialog(
     ),
 )
 
+
 pro_business_channel = create_tv_channel_dialog('PRO Business', ProBusinessSG.start)
 fashion_tv_channel = create_tv_channel_dialog('Fashion TV', FashionTvSG.start)
 hunter_fisher_channel = create_tv_channel_dialog('Охота и рыбалка', HunterFisher.start)
@@ -193,4 +186,3 @@ doctor_channel = create_tv_channel_dialog('Доктор', DoctorSG.start)
 first_veg_channel = create_tv_channel_dialog('Первый вегетарианский', FirstVegSG.start)
 joy_cook_channel = create_tv_channel_dialog('JOY COOK', JoyCookSG.start)
 fishing_dialogues_channel = create_tv_channel_dialog('Диалоги о рыбалке', FishingDialoguesSG.start)
-

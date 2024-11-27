@@ -1,15 +1,7 @@
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, User
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window, setup_dialogs
-from aiogram_dialog.widgets.kbd import Start, Next, Back, Cancel, SwitchTo, ScrollingGroup, Button, Row, Select, Group, Checkbox, ManagedCheckbox
-from aiogram_dialog.widgets.text import Const, Format, List, Multi
-from database.orm_query import orm_get_programs, orm_get_program
-from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from aiogram_dialog import Dialog, Window
+from aiogram_dialog.widgets.kbd import Start, Cancel, Row
+from aiogram_dialog.widgets.text import Const
 from config_data.tv_channel_utils import create_tv_channel_dialog
 
 
@@ -99,31 +91,40 @@ class CartoonClassicsSG(StatesGroup):
 
 child_dialog = Dialog(
     Window(
-        Const(text='Детям 👇'),
-        ScrollingGroup(
+        Const(text='🧒 <b>Детские каналы</b>'),
+        Row(
             Start(Const('СТС Kids'), id='b_sts_kids_ch', state=StsKidsSG.start),
             Start(Const('Киномульт'),id='b_kinomult_ch', state=KinomultSG.start),
             Start(Const('Уникум'), id='b_unicum_ch', state=UnicumSG.start),
+        ),
+        Row(
             Start(Const('Da Vinci'), id='b_davinchi_ch', state=DaVinchi.start),
             Start(Const('Gulli Girl'),id='b_gulli_girl_ch', state=GulliGirlSG.start),
             Start(Const('Радость Моя'), id='b_my_joy_ch', state=MyJoySG.start),
+        ),
+        Row(
             Start(Const('Мультиландия'), id='b_multiland_ch', state=MultilandSG.start),
             Start(Const('TiJi'),id='b_tiji_ch', state=TiJiSG.start),
             Start(Const('Мульт'), id='b_mult_ch', state=MultSG.start),
+        ),
+        Row(
             Start(Const('Рыжий'), id='b_ginger_ch', state=GingerSG.start),
             Start(Const('О!'),id='b_o_ch', state=OSG.start),
             Start(Const('Любимое.ТВ'), id='b_love_dote_tv_ch', state=LoveDoteSG.start),
+        ),
+        Row(
             Start(Const('Детский мир'), id='b_kids_world_ch', state=KidsWorld.start),
             Start(Const('Смайлик ТВ'),id='b_smailik_tv_ch', state=SmilikTvSG.start),
             Start(Const('Советские мультфильмы'), id='b_soviet_mult_ch', state=SovietMultSG.start),
+        ),
+        Row(
             Start(Const('Сказки Зайки'), id='b_skazki_zaiki_ch', state=SkazkiZaikiSG.start),
             Start(Const('Ani'), id='b_ani_ch', state=AniSG.start),
             Start(Const('Мультимузыка'), id='b_multimusic_ch', state=MultimusicSG.start),
+        ),
+        Row(
             Start(Const('Лёва'),id='b_leva_tv_ch', state=LevaTvSG.start),
             Start(Const('Cartoon Classics'), id='b_cartoon_classics_ch', state=CartoonClassicsSG.start),
-            id='channel_group_3',
-            width=3,
-            height=5
         ),
         Cancel(Const('◀️ Назад'), id='b_cancel'),
         #getter=username_getter,
